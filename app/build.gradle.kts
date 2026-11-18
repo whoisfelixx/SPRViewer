@@ -46,7 +46,7 @@ dependencies {
     implementation(libs.documentfile)
     implementation(libs.lifecycle.viewmodel.ktx)
 
-    implementation(libs.progresscircula)
+    // ProgressCircula is vendored in src/main/java/com/hmomeni (JitPack no longer serves it)
     implementation(libs.picasso)
     // apk-parser is vendored in src/main/java/net/dongliu (see third_party/README.md)
     compileOnly(libs.jsr305)
