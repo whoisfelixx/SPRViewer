@@ -2,6 +2,7 @@ package tk.zwander.sprviewer.ui
 
 import android.app.Application
 import android.os.Build
+import android.util.Log
 import com.bugsnag.android.Bugsnag
 import com.squareup.picasso.Picasso
 import org.lsposed.hiddenapibypass.HiddenApiBypass
@@ -18,7 +19,11 @@ class App : Application() {
         Picasso.setSingletonInstance(Picasso.Builder(this).build())
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            HiddenApiBypass.setHiddenApiExemptions("L")
+            try {
+                HiddenApiBypass.setHiddenApiExemptions("L")
+            } catch (e: Throwable) {
+                Log.e("SPRViewer", "Hidden API bypass failed", e)
+            }
         }
     }
 }

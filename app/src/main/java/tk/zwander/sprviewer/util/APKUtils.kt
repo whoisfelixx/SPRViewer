@@ -10,6 +10,7 @@ import android.content.pm.parsing.result.ParseTypeImpl
 import android.content.pm.pkg.FrameworkPackageUserState
 import android.os.Build
 import android.permission.PermissionManager
+import android.util.Log
 import net.dongliu.apk.parser.ApkFile
 import tk.zwander.sprviewer.data.CustomPackageInfo
 import java.io.File
@@ -30,8 +31,27 @@ fun ApkFile.getZipFile(): ZipFile {
         .get(this) as ZipFile
 }
 
-@SuppressLint("PrivateApi")
+/**
+ * Parsing goes through hidden framework APIs that change between Android versions. If
+ * anything goes wrong (including Errors like NoSuchMethodError, which `catch (Exception)`
+ * would miss) fall back to just the package name instead of crashing.
+ */
 fun parsePackageCompat(
+    packageFile: File,
+    packageName: String,
+    flags: Int,
+    useCaches: Boolean
+): CustomPackageInfo {
+    return try {
+        parsePackageCompatUnsafe(packageFile, packageName, flags, useCaches)
+    } catch (e: Throwable) {
+        Log.e("SPRViewer", "Package parsing failed, using fallback", e)
+        CustomPackageInfo(packageName)
+    }
+}
+
+@SuppressLint("PrivateApi")
+private fun parsePackageCompatUnsafe(
     packageFile: File,
     packageName: String,
     flags: Int,
@@ -62,7 +82,7 @@ fun parsePackageCompat(
                     FrameworkPackageUserState.DEFAULT
                 )
                 CustomPackageInfo(info)
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 CustomPackageInfo(packageName)
             }
         }

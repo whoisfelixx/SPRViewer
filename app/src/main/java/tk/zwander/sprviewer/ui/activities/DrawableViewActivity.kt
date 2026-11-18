@@ -42,6 +42,7 @@ import java.util.*
 class DrawableViewActivity : AppCompatActivity(), CoroutineScope by MainScope() {
     companion object {
         const val EXTRA_DRAWABLE_INFO = "drawable_info"
+        private const val MAX_IMAGE_DIMENSION = 4096
     }
 
     private val apkPath by lazy {
@@ -153,13 +154,19 @@ class DrawableViewActivity : AppCompatActivity(), CoroutineScope by MainScope() 
                                     "${remRes.getResourceTypeName(drawableId)}/" +
                                     "$drawableId"
                         )
-                    ).into(binding.image, object : Callback {
+                    )
+                        // Very large images can't be drawn by the GPU ("trying to draw too
+                        // large bitmap"), so cap the decoded size.
+                        .resize(MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION)
+                        .centerInside()
+                        .onlyScaleDown()
+                        .into(binding.image, object : Callback {
                         override fun onError(e: Exception?) {
                             try {
                                 binding.image.setImageDrawable(ResourcesCompat.getDrawable(remRes, drawableId, remRes.newTheme()))
 
                                 saveImg?.isVisible = !isViewingAnimatedImage
-                            } catch (e: Exception) {
+                            } catch (e: Throwable) {
                                 binding.image.isVisible = false
                                 binding.text.isVisible = true
 
@@ -174,7 +181,7 @@ class DrawableViewActivity : AppCompatActivity(), CoroutineScope by MainScope() 
                             imageLoadingDone()
                         }
                     })
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
                     Log.e("SPRViewer", "ERR", e)
                     Toast.makeText(this@DrawableViewActivity, R.string.load_image_error, Toast.LENGTH_SHORT).show()
                     imageLoadingDone()

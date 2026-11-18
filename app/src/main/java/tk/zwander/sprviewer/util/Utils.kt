@@ -3,6 +3,7 @@ package tk.zwander.sprviewer.util
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.res.Resources
+import android.util.Log
 import android.view.View
 import android.widget.PopupWindow
 import androidx.collection.ArraySet
@@ -185,54 +186,66 @@ suspend fun getAppDrawables(
         val rawSize = rawIndex?.value?.entryFlags?.size ?: 0
         totalSize += drawableSize + mipmapSize + rawSize
 
-        val loopRange: suspend CoroutineScope.(start: Int, end: Int) -> Unit = { start: Int, end: Int ->
+        val loopRange: suspend CoroutineScope.(start: Int, end: Int, defaultType: String) -> Unit = { start: Int, end: Int, defaultType: String ->
             for (i in start until end) {
                 try {
                     val r = table.getResourcesById(i.toLong())
                     if (r.isEmpty()) continue
 
                     r.forEach { resource ->
-                        val entry = resource.resourceEntry
+                        // A single broken/unsupported entry (common in big apps like the
+                        // Google apps) must not take down the whole list.
+                        try {
+                            val entry = resource.resourceEntry
 
-                        val pathOrColor = entry.toStringValue(table, Locale.getDefault())
+                            val pathOrColor = entry.toStringValue(table, Locale.getDefault())
 
-                        val split = pathOrColor.split("/")
-                        val fullName = split.last().split(".")
+                            val split = pathOrColor.split("/")
+                            val fullName = split.last().split(".")
 
-                        val typeMask = 0x00ff0000
-                        val typeSpec = resPkg.getTypeSpec(((typeMask and i) - 0xffff).toShort())
-                        val typeName = typeSpec?.name!!
-                        val name = entry.key
-                        val ext = if (fullName.size > 1) fullName.subList(1, fullName.size)
-                            .joinToString(".") else null
+                            val typeId = ((i shr 16) and 0xff).toShort()
+                            val typeName = resPkg.getTypeSpec(typeId)?.name ?: defaultType
+                            val name = entry.key
+                            val ext = if (fullName.size > 1) fullName.subList(1, fullName.size)
+                                .joinToString(".") else null
 
-                        val data = UDrawableData(
-                            typeName,
-                            name,
-                            ext,
-                            pathOrColor,
-                            i,
-                            apk,
-                            packageInfo,
-                            resource.type.config
-                        )
+                            val data = UDrawableData(
+                                typeName,
+                                name,
+                                ext,
+                                pathOrColor,
+                                i,
+                                apk,
+                                packageInfo,
+                                resource.type.config
+                            )
 
-                        count++
-                        list.add(data)
-                        drawableFound(data, totalSize, count)
+                            count++
+                            list.add(data)
+                            drawableFound(data, totalSize, count)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Throwable) {
+                            Log.w("SPRViewer", "Skipping unreadable resource 0x${i.toString(16)}", e)
+                        }
                     }
-                } catch (ignored: Resources.NotFoundException) {}
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    // Includes Resources.NotFoundException and parser errors.
+                    Log.w("SPRViewer", "Skipping unreadable resource 0x${i.toString(16)}", e)
+                }
             }
         }
 
         if (drawableStart != -1) {
-            loopRange(drawableStart, drawableStart + drawableSize)
+            loopRange(drawableStart, drawableStart + drawableSize, "drawable")
         }
         if (mipmapStart != -1) {
-            loopRange(mipmapStart, mipmapStart + mipmapSize)
+            loopRange(mipmapStart, mipmapStart + mipmapSize, "mipmap")
         }
         if (rawStart != -1) {
-            loopRange(rawStart, rawStart + rawSize)
+            loopRange(rawStart, rawStart + rawSize, "raw")
         }
     }
 

@@ -48,7 +48,10 @@ dependencies {
 
     implementation(libs.progresscircula)
     implementation(libs.picasso)
-    implementation(libs.apk.parser)
+    // apk-parser is vendored in src/main/java/net/dongliu (see third_party/README.md)
+    compileOnly(libs.jsr305)
+    implementation(libs.bouncycastle.prov)
+    implementation(libs.bouncycastle.pkix)
     implementation(libs.photoview)
     implementation(libs.pngj)
     implementation(libs.numberprogressbar)

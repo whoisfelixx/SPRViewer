@@ -3,6 +3,7 @@ package tk.zwander.sprviewer.ui.adapters
 import android.annotation.SuppressLint
 import android.content.ContentResolver
 import android.content.res.Resources
+import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.util.Log
 import android.view.LayoutInflater
@@ -12,6 +13,7 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.isVisible
 import com.squareup.picasso.Callback
 import com.squareup.picasso.Picasso
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -23,6 +25,11 @@ import tk.zwander.sprviewer.databinding.DrawableInfoLayoutBinding
 import tk.zwander.sprviewer.util.getAppDrawables
 
 class DrawableListAdapter(private val remRes: Resources, private val itemSelectedListener: (UDrawableData) -> Unit) : BaseListAdapter<UDrawableData, DrawableListAdapter.ListVH>() {
+    companion object {
+        private const val PREVIEW_SIZE_DP = 48
+        private const val MAX_FALLBACK_BYTES = 16 * 1024 * 1024
+    }
+
     override val viewRes = R.layout.drawable_info_layout
 
     @SuppressLint("SetTextI18n")
@@ -57,12 +64,20 @@ class DrawableListAdapter(private val remRes: Resources, private val itemSelecte
         listener: () -> Unit,
         progressListener: (Int, Int) -> Unit
     ) = launch {
-        val drawables = withContext(Dispatchers.IO) {
-            getAppDrawables(apk, packageInfo) { _, size, count ->
-                launch(Dispatchers.Main) {
-                    progressListener(size, count)
+        val drawables = try {
+            withContext(Dispatchers.IO) {
+                getAppDrawables(apk, packageInfo) { _, size, count ->
+                    launch(Dispatchers.Main) {
+                        progressListener(size, count)
+                    }
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            // Includes OutOfMemoryError on huge resource tables.
+            Log.e("SPRViewer", "Failed to load drawables", e)
+            emptyList()
         }
 
         withContext(Dispatchers.Main) {
@@ -80,6 +95,8 @@ class DrawableListAdapter(private val remRes: Resources, private val itemSelecte
                 binding.extIndicator.isVisible = true
                 binding.imgPreview.isVisible = true
 
+                val previewSize = (PREVIEW_SIZE_DP * resources.displayMetrics.density).toInt()
+
                 try {
                     Picasso.get().cancelRequest(binding.imgPreview)
 
@@ -90,28 +107,42 @@ class DrawableListAdapter(private val remRes: Resources, private val itemSelecte
                                     "${remRes.getResourceTypeName(info.id)}/" +
                                     "${info.id}"
                         )
-                    ).into(binding.imgPreview, object : Callback {
-                        override fun onError(e: Exception?) {
-                            launch {
-                                withContext(Dispatchers.Main) {
-                                    try {
-                                        binding.imgPreview.setImageDrawable(
-                                            ResourcesCompat.getDrawable(remRes, info.id, remRes.newTheme()))
-                                        binding.extIndicator.isVisible = false
-                                    } catch (e: Exception) {
+                    )
+                        // Without this, Picasso decodes the full-size image even though the
+                        // preview is only 48dp. Big images then crash the app with
+                        // "Canvas: trying to draw too large bitmap" or OOM.
+                        .resize(previewSize, previewSize)
+                        .centerInside()
+                        .onlyScaleDown()
+                        .into(binding.imgPreview, object : Callback {
+                            override fun onError(e: Exception?) {
+                                try {
+                                    val fallback = ResourcesCompat.getDrawable(remRes, info.id, remRes.newTheme())
+
+                                    // Don't hand a gigantic bitmap to the RecyclerView; drawing it
+                                    // throws "trying to draw too large bitmap".
+                                    if (fallback is BitmapDrawable &&
+                                        (fallback.bitmap?.allocationByteCount ?: 0) > MAX_FALLBACK_BYTES) {
                                         binding.imgPreview.isVisible = false
+                                    } else {
+                                        binding.imgPreview.setImageDrawable(fallback)
+                                        binding.extIndicator.isVisible = false
                                     }
+                                } catch (t: Throwable) {
+                                    // Catch Throwable: broken/huge drawables can throw Errors
+                                    // (OOM, StackOverflow) that would otherwise kill the app.
+                                    binding.imgPreview.isVisible = false
                                 }
                             }
-                        }
 
-                        override fun onSuccess() {
-                            binding.extIndicator.isVisible = false
-                        }
-                    })
+                            override fun onSuccess() {
+                                binding.extIndicator.isVisible = false
+                            }
+                        })
 
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
                     Log.e("SPRViewer", "ERR", e)
+                    binding.imgPreview.isVisible = false
                 }
 
                 binding.drawableName.text = "${info.name}.${info.ext}"
