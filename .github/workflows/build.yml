@@ -15,6 +15,20 @@ jobs:
           java-version: 17
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+      - name: Install Android platform 34
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34"
+      # The app calls hidden Android framework APIs (PackageParser, ResourcesManager, ...).
+      # Compiling against an android.jar that contains them is required.
+      - name: Replace android.jar with a hidden-API version
+        run: |
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/Reginer/aosp-android-jar.git "$RUNNER_TEMP/hidden"
+          cd "$RUNNER_TEMP/hidden"
+          git sparse-checkout set android-34
+          JAR=$(find android-34 -name android.jar | head -1)
+          test -n "$JAR" || { echo "android.jar not found"; ls -R android-34 | head; exit 1; }
+          ls -la "$JAR"
+          cp "$JAR" "$ANDROID_HOME/platforms/android-34/android.jar"
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x ./gradlew && ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4
