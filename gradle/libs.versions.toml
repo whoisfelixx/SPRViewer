@@ -1,6 +1,7 @@
 [versions]
 androidGradlePlugin = "8.7.0"
-apkParser = "7cd66d83c9"
+bouncycastle = "1.70"
+jsr305 = "3.0.2"
 appcompat = "1.7.0"
 balloon = "1.6.7"
 bugsnagAndroid = "6.8.0"
@@ -23,7 +24,9 @@ progresscircula = "v0.2.1"
 recyclerview = "1.3.2"
 
 [libraries]
-apk-parser = { module = "com.github.zacharee:apk-parser", version.ref = "apkParser" }
+bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk15on", version.ref = "bouncycastle" }
+bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk15on", version.ref = "bouncycastle" }
+jsr305 = { module = "com.google.code.findbugs:jsr305", version.ref = "jsr305" }
 appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
 balloon = { module = "com.github.skydoves:balloon", version.ref = "balloon" }
 bugsnag-android = { module = "com.bugsnag:bugsnag-android", version.ref = "bugsnagAndroid" }
